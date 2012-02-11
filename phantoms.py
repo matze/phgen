@@ -1,6 +1,6 @@
 # Copyright (C) 2012 Matthias Vogelgesang
 #
-# This program is free software: you can redistribute it and/or modify 
+# This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation, either version 3 of the License, or
 # (at your option) any later version.
@@ -11,9 +11,10 @@
 # GNU General Public License for more details.
 #
 # You should have received a copy of the GNU General Public License
-# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+# along with this program. If not, see <http://www.gnu.org/licenses/>.
 
 import numpy as np
+
 
 # Data taken from "Principles of Computerized Tomographic Imaging" by Kak and
 # Slaney (1999). It is in the same format as table 3.1: x1, y1, A, B, rotation
@@ -31,6 +32,7 @@ shepp_logan = [
         (0.06, -0.605, 0.046, 0.023, 90.0, 0.01),
         ]
 
+predefined = { 'shepp-logan' : shepp_logan }
 
 def _rotation_matrix(A, B, angle, deg=True):
     if deg:
