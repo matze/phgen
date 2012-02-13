@@ -152,7 +152,7 @@ static void write_tiff(float *image, const char *name, size_t width, size_t heig
     TIFFSetField(tif, TIFFTAG_SAMPLESPERPIXEL, 1);
     TIFFSetField(tif, TIFFTAG_PLANARCONFIG, PLANARCONFIG_CONTIG);
 
-    const size_t rows_per_strip = TIFFDefaultStripSize(tif, (size_t) -1);
+    const size_t rows_per_strip = TIFFDefaultStripSize(tif, 0);
     TIFFSetField(tif, TIFFTAG_ROWSPERSTRIP, rows_per_strip);
 
     for (int y = 0; y < height; y++, image += width)
