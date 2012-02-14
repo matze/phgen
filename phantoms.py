@@ -34,6 +34,7 @@ shepp_logan = [
 
 predefined = { 'shepp-logan' : shepp_logan }
 
+
 def _rotation_matrix(A, B, angle, deg=True):
     if deg:
         angle = angle * np.pi / 180.0

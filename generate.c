@@ -101,7 +101,7 @@ static float *compute_sinogram(size_t width, double angle_step, size_t num_angle
     /* This could be incorrect if double is not IEEE compliant */
     memset(sinogram, 0, sizeof(float) * width * num_angles);
 
-    const double w2 = width / 2.0;
+    const double t_step = 2.0 / (width - 1); /* Including end-point +1.0 */
 
     for (int i = 0; i < num_ellipses; i++) {
         const double x1 = *(ellipses++);
@@ -111,26 +111,30 @@ static float *compute_sinogram(size_t width, double angle_step, size_t num_angle
         const double alpha = is_deg ? M_PI * (*ellipses) / 180.0 : (*ellipses);
         ellipses++;
         const double phi = *(ellipses++);
-        const double s = sqrt(x1*x1 + y1*y1);
 
         double gamma = x1 == 0.0 ? M_PI / 2.0 : atan(y1 / x1);
         gamma = y1 < 0.0 ? -gamma : gamma;
 
-        const double r = 2 * phi * A * B;
+        const double s = sqrt(x1*x1 + y1*y1);
+        const double r = 2.0 * phi * A * B;
         const double d = x1 <= 0.0 ? 1.0 : -1.0;
 
 #pragma omp parallel for
         for (int y = 0; y < num_angles; y++) {
-            const double theta = y * angle_step - alpha; 
-            const double a2 = A * A * cos(theta) * cos(theta) + B * B * sin(theta) * sin(theta);
-            const double c_gamma_theta = cos(gamma - theta);
+            const double theta = y * angle_step;
+            const double theta_ = theta - alpha;
+            const double c_theta = cos(theta_);
+            const double s_theta = sin(theta_);
+            const double a2 = A * A * c_theta * c_theta + B * B * s_theta * s_theta;
+            const double r_a2 = r / a2;
 
-            for (int x = 0; x < width; x++) {
-                const double t = (x - w2) / w2;
-                const double t_ = t + d * s * c_gamma_theta;
+            double t = -1.0 + d * s * cos(gamma - theta);
 
-                if (fabs(t_) <= sqrt(a2))
-                    sinogram[y * width + x] += r * sqrt(a2 - t_*t_) / a2;
+            for (int x = 0;  x < width; x++) {
+                if (fabs(t) <= sqrt(a2))
+                    sinogram[y * width + x] += r_a2 * sqrt(a2 - t*t);
+                
+                t += t_step;
             }
         }
     }
