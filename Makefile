@@ -1,4 +1,6 @@
+LDFLAGS += -lm -ltiff
+CFLAGS += -Wall -Werror -std=c99 -fopenmp -O3
 all: generate
 
 generate: generate.c
-	gcc -Wall -std=c99 -o generate -lm -ltiff -fopenmp -O2 generate.c
+	$(CC) $(CFLAGS) -o $@ $< $(LDFLAGS)
