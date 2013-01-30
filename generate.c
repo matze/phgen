@@ -1,6 +1,6 @@
 /* Copyright (C) 2012 Matthias Vogelgesang
  *
- * This program is free software: you can redistribute it and/or modify 
+ * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
@@ -26,21 +26,33 @@
 #define M_PI           3.14159265358979323846
 #endif
 
-static const unsigned int num_shepp_logan = 10;
+static const unsigned N_SHEPP_LOGAN_ELLIPSES = 10;
+static const unsigned N_ELLIPSE_PARAMS = 6;
 
 static double shepp_logan[] = {
-        0.0, 0.0, 0.92, 0.69, 90.0, 2.0,
-        0.0, -0.0184, 0.874, 0.6624, 90.0, -0.98,
-        0.22, 0.0, 0.31, 0.11, 72.0, -0.02,
-        -0.22, 0.0, 0.41, 0.16, 108.0, -0.02,
-        0.0, 0.35, 0.25, 0.21, 90.0, 0.01,
-        0.0, 0.1, 0.046, 0.046, 0.0, 0.01,
-        0.0, -0.1, 0.046, 0.046, 0.0, 0.01,
-        -0.08, -0.605, 0.046, 0.023, 0.0, 0.01,
-        0.0, -0.605, 0.023, 0.023, 0.0, 0.01,
-        0.06, -0.605, 0.046, 0.023, 90.0, 0.01
+    0.0, 0.0, 0.92, 0.69, 90.0, 2.0,
+    0.0, -0.0184, 0.874, 0.6624, 90.0, -0.98,
+    0.22, 0.0, 0.31, 0.11, 72.0, -0.02,
+    -0.22, 0.0, 0.41, 0.16, 108.0, -0.02,
+    0.0, 0.35, 0.25, 0.21, 90.0, 0.01,
+    0.0, 0.1, 0.046, 0.046, 0.0, 0.01,
+    0.0, -0.1, 0.046, 0.046, 0.0, 0.01,
+    -0.08, -0.605, 0.046, 0.023, 0.0, 0.01,
+    0.0, -0.605, 0.023, 0.023, 0.0, 0.01,
+    0.06, -0.605, 0.046, 0.023, 90.0, 0.01
 };
 
+typedef struct {
+    bool read_from_stdin;
+    bool generate_phantom;
+    bool generate_sinogram;
+    int width;
+    int height;
+    double angle_step;
+    int n_frames;
+    int n_vectors;
+    double *vectors;
+} Options;
 
 static float *
 compute_slice (size_t width,
@@ -88,7 +100,7 @@ compute_slice (size_t width,
 
                 if (thr <= 1.0)
                     phantom[y * width + x] += phi;
-            } 
+            }
         }
     }
 
@@ -107,7 +119,7 @@ compute_sinogram (size_t width,
 
     if (sinogram == NULL)
         return NULL;
-    
+
     /* This could be incorrect if double is not IEEE compliant */
     memset (sinogram, 0, sizeof (float) * width * num_angles);
 
@@ -143,12 +155,12 @@ compute_sinogram (size_t width,
             for (int x = 0;  x < width; x++) {
                 if (fabs (t) <= sqrt (a2))
                     sinogram[y * width + x] += r_a2 * sqrt (a2 - t*t);
-                
+
                 t += t_step;
             }
         }
     }
-    
+
     return sinogram;
 }
 
@@ -182,14 +194,16 @@ write_tiff (float *image,
 static void
 usage (void)
 {
-    fprintf (stderr, 
-             "usage: generate --width WIDTH --height HEIGHT [Options] [-]\n" \
+    fprintf (stderr,
+             "usage: generate -s/-p -w WIDTH -h HEIGHT [Options] [-]\n" \
              "Options:\n" \
              "  -s, --sinogram\tGenerate sinogram\n" \
              "  -p, --phantom\t\tGenerate slice phantom\n" \
              "  -a, --angle-step S\tAngle between two projections\n" \
              "  -w, --width WIDTH\tWidth of phantom or projection\n" \
              "  -h, --height HEIGHT\tHeight of phantom or number of projections\n" \
+             "  -n, --num-frames\tNumber of frames to generate\n" \
+             "      --translate VEC\tString containing vector elements (x1 y1 [x2 y2 ...])\n" \
              "  -\t\t\tRead ellipses data from stdin\n");
     exit (EXIT_SUCCESS);
 }
@@ -202,10 +216,9 @@ read_ellipses (size_t *num_ellipses)
     char buffer[num_bytes];
 
     double *ellipses = NULL;
-    const int num_params = 6;
     size_t n = 0;
     int current_param = 0;
-    double params[num_params];
+    double params[N_ELLIPSE_PARAMS];
 
     while (fgets (buffer, num_bytes, stdin) != NULL) {
         char *pch = strtok (buffer, delimiter);
@@ -213,13 +226,13 @@ read_ellipses (size_t *num_ellipses)
         while (pch != NULL) {
             params[current_param++] = atof (pch);
 
-            if (current_param == num_params) {
+            if (current_param == N_ELLIPSE_PARAMS) {
                 current_param = 0;
                 n++;
-                ellipses = (double *) realloc (ellipses, sizeof (double) * num_params * n);
+                ellipses = (double *) realloc (ellipses, sizeof (double) * N_ELLIPSE_PARAMS * n);
 
-                for (int i = 0; i < num_params; i++)
-                    ellipses[(n-1)*num_params + i] = params[i]; 
+                for (int i = 0; i < N_ELLIPSE_PARAMS; i++)
+                    ellipses[(n-1)*N_ELLIPSE_PARAMS + i] = params[i];
             }
 
             pch = strtok (NULL, delimiter);
@@ -230,11 +243,43 @@ read_ellipses (size_t *num_ellipses)
     return ellipses;
 }
 
-int
-main (int argc,
-      const char **argv)
+static void
+parse_vectors (char *s, Options *opts)
 {
-    int getopt_ret, option_index;
+    static const char *delimiter = " ";
+    char *token;
+
+    token = strtok (s, delimiter);
+    opts->vectors = NULL;
+
+    while (token != NULL) {
+        double x;
+
+        x = atof (token);
+        token = strtok (NULL, delimiter);
+
+        if (token != NULL) {
+            double y;
+            int n_vectors;
+
+            n_vectors = ++opts->n_vectors;
+            y = atof (token);
+
+            opts->vectors = realloc (opts->vectors, n_vectors * 2 * sizeof (double));
+            opts->vectors[(n_vectors-1) * 2] = x;
+            opts->vectors[(n_vectors-1) * 2 + 1] = y;
+            token = strtok (NULL, delimiter);
+        }
+    }
+}
+
+static Options *
+options_read (int argc,
+              const char **argv)
+{
+    Options *opts;
+    int getopt_ret;
+    int option_index;
 
     enum {
         OPT_HELP = '?',
@@ -242,7 +287,9 @@ main (int argc,
         OPT_SINOGRAM = 's',
         OPT_HEIGHT = 'h',
         OPT_PHANTOM = 'p',
-        OPT_WIDTH = 'w'
+        OPT_WIDTH = 'w',
+        OPT_NUM_FRAMES = 'n',
+        OPT_TRANSLATE
     };
 
     static struct option long_options[] = {
@@ -252,61 +299,127 @@ main (int argc,
         { "height", required_argument, 0, OPT_HEIGHT },
         { "help", no_argument, 0, OPT_HELP },
         { "angle-step", required_argument, 0, OPT_ANGLE_STEP },
-        {0, 0, 0, 0}       
+        { "num-frames", required_argument, 0, OPT_NUM_FRAMES },
+        { "translate", required_argument, 0, OPT_TRANSLATE },
+        {0, 0, 0, 0}
     };
 
-    bool read_from_stdin = strcmp (argv[argc-1], "-") == 0;
-    bool generate_phantom = false, generate_sinogram = false;
-    double angle_step = -1.0;
-    int width = -1, height = -1;
+    opts = malloc (sizeof (Options));
+
+    opts->read_from_stdin = strcmp (argv[argc-1], "-") == 0;
+    opts->n_frames = 1;
+    opts->n_vectors = 0;
+    opts->vectors = NULL;
+    opts->width = opts->height = opts->angle_step = -1;
 
     while (1) {
         getopt_ret = getopt_long (argc, (char *const *) argv, "spw:h:?:a:n:", long_options,
                 &option_index);
 
-        if (getopt_ret == -1) 
+        if (getopt_ret == -1)
             break;
 
         switch (getopt_ret) {
             case OPT_SINOGRAM:
-                    generate_sinogram = true;
-                    break;
+                opts->generate_sinogram = true;
+                break;
             case OPT_PHANTOM:
-                    generate_phantom = true;
-                    break;
+                opts->generate_phantom = true;
+                break;
             case OPT_WIDTH:
-                    width = atoi (optarg);
-                    break;
+                opts->width = atoi (optarg);
+                break;
             case OPT_HEIGHT:
-                    height = atoi (optarg);
-                    break;
+                opts->height = atoi (optarg);
+                break;
+            case OPT_NUM_FRAMES:
+                opts->n_frames = atoi (optarg);
+                break;
+            case OPT_TRANSLATE:
+                parse_vectors (optarg, opts);
+                break;
             case OPT_HELP:
-                    usage ();
+                usage ();
             default:
-                    break;
+                break;
         }
     }
 
-    size_t num_ellipses = num_shepp_logan;
-    double *ellipses = shepp_logan;
+    return opts;
+}
 
-    if (read_from_stdin)
-        ellipses = read_ellipses (&num_ellipses);
+static void
+options_free (Options *opts)
+{
+    free (opts->vectors);
+    free (opts);
+}
 
-    if ((width < 0) || (height < 0) || (!generate_phantom && !generate_sinogram))
+static void
+animate_ellipses (double *ellipses,
+                  size_t n_ellipses,
+                  Options *opts)
+{
+    size_t max_ellipses;
+
+    max_ellipses = opts->n_vectors > n_ellipses ? n_ellipses : opts->n_vectors;
+
+    for (int i = 0; i < max_ellipses; i++) {
+        int index = i * N_ELLIPSE_PARAMS;
+        ellipses[index] += opts->vectors[i*2];
+        ellipses[index+1] += opts->vectors[i*2+1];
+    }
+}
+
+int
+main (int argc,
+      const char **argv)
+{
+    Options *opts;
+    size_t n_ellipses;
+    double *ellipses;
+
+    opts = options_read (argc, argv);
+
+    if ((opts->width < 0) || (opts->height < 0) || (!opts->generate_phantom && !opts->generate_sinogram))
         usage ();
 
-    if (generate_phantom) {
-        float *phantom = compute_slice (width, height, ellipses, num_ellipses, true);
-        write_tiff (phantom, "phantom.tif", width, height);
-        free (phantom);
+    if (opts->read_from_stdin) {
+        ellipses = read_ellipses (&n_ellipses);
+    }
+    else {
+        ellipses = shepp_logan;
+        n_ellipses = N_SHEPP_LOGAN_ELLIPSES;
     }
 
-    if (generate_sinogram) {
-        angle_step = angle_step < 0.0 ? M_PI / height : angle_step;
-        float *sinogram = compute_sinogram (width, angle_step, height, ellipses, num_ellipses, true);
-        write_tiff (sinogram, "sinogram.tif", width, height);
-        free (sinogram);
+    for (int i = 0; i < opts->n_frames; i++) {
+        if (opts->generate_phantom) {
+            char filename[FILENAME_MAX];
+            float *phantom;
+
+            phantom = compute_slice (opts->width, opts->height, ellipses, n_ellipses, true);
+
+            snprintf (filename, FILENAME_MAX, "phantom-%05i.tif", i);
+            write_tiff (phantom, filename, opts->width, opts->height);
+            free (phantom);
+        }
+
+        if (opts->generate_sinogram) {
+            char filename[FILENAME_MAX];
+            double angle_step;
+            float *sinogram;
+
+            angle_step = opts->angle_step < 0.0 ? M_PI / opts->height : opts->angle_step;
+            sinogram = compute_sinogram (opts->width, angle_step, opts->height, ellipses, n_ellipses, true);
+
+            snprintf (filename, FILENAME_MAX, "sinogram-%05i.tif", i);
+            write_tiff (sinogram, filename, opts->width, opts->height);
+            free (sinogram);
+        }
+
+        animate_ellipses (ellipses, n_ellipses, opts);
     }
+
+    options_free (opts);
     return 0;
 }
