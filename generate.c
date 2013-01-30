@@ -22,9 +22,7 @@
 #include <stdbool.h>
 #include <tiffio.h>
 
-#ifndef M_PI
-#define M_PI           3.14159265358979323846
-#endif
+static const double M_PI    = 3.1415926535897932384626433832795;
 
 static const unsigned N_SHEPP_LOGAN_ELLIPSES = 10;
 static const unsigned N_ELLIPSE_PARAMS = 6;
@@ -133,13 +131,10 @@ compute_sinogram (size_t width,
         const double alpha = is_deg ? M_PI * (*ellipses) / 180.0 : (*ellipses);
         ellipses++;
         const double phi = *(ellipses++);
-
-        double gamma = x1 == 0.0 ? M_PI / 2.0 : atan (y1 / x1);
-        gamma = y1 < 0.0 ? -gamma : gamma;
+        const double gamma = atan2 (y1, x1);
 
         const double s = sqrt (x1*x1 + y1*y1);
         const double r = 2.0 * phi * A * B;
-        const double d = x1 <= 0.0 ? 1.0 : -1.0;
 
 #pragma omp parallel for
         for (int y = 0; y < num_angles; y++) {
@@ -150,7 +145,7 @@ compute_sinogram (size_t width,
             const double a2 = A * A * c_theta * c_theta + B * B * s_theta * s_theta;
             const double r_a2 = r / a2;
 
-            double t = -1.0 + d * s * cos (gamma - theta);
+            double t = -1.0 - s * cos (gamma - theta);
 
             for (int x = 0;  x < width; x++) {
                 if (fabs (t) <= sqrt (a2))
