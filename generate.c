@@ -1,18 +1,18 @@
 /* Copyright (C) 2012 Matthias Vogelgesang
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- */
+*
+* This program is free software: you can redistribute it and/or modify
+* it under the terms of the GNU General Public License as published by
+* the Free Software Foundation, either version 3 of the License, or
+* (at your option) any later version.
+*
+* This program is distributed in the hope that it will be useful,
+* but WITHOUT ANY WARRANTY; without even the implied warranty of
+* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+* GNU General Public License for more details.
+*
+* You should have received a copy of the GNU General Public License
+* along with this program. If not, see <http://www.gnu.org/licenses/>.
+*/
 
 #include <getopt.h>
 #include <math.h>
@@ -22,7 +22,7 @@
 #include <stdbool.h>
 #include <tiffio.h>
 
-static const double M_PI    = 3.1415926535897932384626433832795;
+static const double M_PI = 3.1415926535897932384626433832795;
 
 static const unsigned N_SHEPP_LOGAN_ELLIPSES = 10;
 static const unsigned N_ELLIPSE_PARAMS = 6;
@@ -49,7 +49,9 @@ typedef struct {
     double angle_step;
     int n_frames;
     int n_vectors;
+    int n_ellipsesize;
     double *vectors;
+    double *ellipsesize;
 } Options;
 
 static float *
@@ -147,7 +149,7 @@ compute_sinogram (size_t width,
 
             double t = -1.0 - s * cos (gamma - theta);
 
-            for (int x = 0;  x < width; x++) {
+            for (int x = 0; x < width; x++) {
                 if (fabs (t) <= sqrt (a2))
                     sinogram[y * width + x] += r_a2 * sqrt (a2 - t*t);
 
@@ -192,14 +194,15 @@ usage (void)
     fprintf (stderr,
              "usage: generate -s/-p -w WIDTH -h HEIGHT [Options] [-]\n" \
              "Options:\n" \
-             "  -s, --sinogram\tGenerate sinogram\n" \
-             "  -p, --phantom\t\tGenerate slice phantom\n" \
-             "  -a, --angle-step S\tAngle between two projections\n" \
-             "  -w, --width WIDTH\tWidth of phantom or projection\n" \
-             "  -h, --height HEIGHT\tHeight of phantom or number of projections\n" \
-             "  -n, --num-frames\tNumber of frames to generate\n" \
-             "      --translate VEC\tString containing vector elements (x1 y1 [x2 y2 ...])\n" \
-             "  -\t\t\tRead ellipses data from stdin\n");
+             " -s, --sinogram\tGenerate sinogram\n" \
+             " -p, --phantom\t\tGenerate slice phantom\n" \
+             " -a, --angle-step S\tAngle between two projections\n" \
+             " -w, --width WIDTH\tWidth of phantom or projection\n" \
+             " -h, --height HEIGHT\tHeight of phantom or number of projections\n" \
+             " -n, --num-frames\tNumber of frames to generate\n" \
+             " --translate VEC\tString containing vector elements (x1 y1 [x2 y2 ...])\n" \
+             " -r, --resize AB\tString containing vector elements (x1 y1 [x2 y2 ...])\n" \
+             " -\t\t\tRead ellipses data from stdin\n");
     exit (EXIT_SUCCESS);
 }
 
@@ -238,14 +241,15 @@ read_ellipses (size_t *num_ellipses)
     return ellipses;
 }
 
-static void
-parse_vectors (char *s, Options *opts)
+static double *
+parse_vectors (char *s, int *n)
 {
     static const char *delimiter = " ";
     char *token;
+    double *array;
 
     token = strtok (s, delimiter);
-    opts->vectors = NULL;
+    array = NULL;
 
     while (token != NULL) {
         double x;
@@ -255,22 +259,25 @@ parse_vectors (char *s, Options *opts)
 
         if (token != NULL) {
             double y;
-            int n_vectors;
 
-            n_vectors = ++opts->n_vectors;
+            *n += 1;
             y = atof (token);
 
-            opts->vectors = realloc (opts->vectors, n_vectors * 2 * sizeof (double));
-            opts->vectors[(n_vectors-1) * 2] = x;
-            opts->vectors[(n_vectors-1) * 2 + 1] = y;
+            array = realloc (array, *n * 2 * sizeof (double));
+            array[(*n - 1) * 2] = x;
+            array[(*n - 1) * 2 + 1] = y;
             token = strtok (NULL, delimiter);
         }
     }
+
+    return array;
 }
+
 
 static Options *
 options_read (int argc,
-              const char **argv)
+              const char **argv
+)
 {
     Options *opts;
     int getopt_ret;
@@ -284,18 +291,20 @@ options_read (int argc,
         OPT_PHANTOM = 'p',
         OPT_WIDTH = 'w',
         OPT_NUM_FRAMES = 'n',
-        OPT_TRANSLATE
+        OPT_TRANSLATE = 't',
+        OPT_RESIZE = 'r'
     };
 
     static struct option long_options[] = {
         { "sinogram", no_argument, 0, OPT_SINOGRAM },
-        { "phantom",  no_argument, 0, OPT_PHANTOM },
+        { "phantom", no_argument, 0, OPT_PHANTOM },
         { "width", required_argument, 0, OPT_WIDTH },
         { "height", required_argument, 0, OPT_HEIGHT },
         { "help", no_argument, 0, OPT_HELP },
         { "angle-step", required_argument, 0, OPT_ANGLE_STEP },
         { "num-frames", required_argument, 0, OPT_NUM_FRAMES },
         { "translate", required_argument, 0, OPT_TRANSLATE },
+        { "resize", required_argument, 0, OPT_RESIZE },
         {0, 0, 0, 0}
     };
 
@@ -303,12 +312,14 @@ options_read (int argc,
 
     opts->read_from_stdin = strcmp (argv[argc-1], "-") == 0;
     opts->n_frames = 1;
+    opts->n_ellipsesize = 0;
     opts->n_vectors = 0;
     opts->vectors = NULL;
+    opts->ellipsesize = NULL;
     opts->width = opts->height = opts->angle_step = -1;
 
     while (1) {
-        getopt_ret = getopt_long (argc, (char *const *) argv, "spw:h:?:a:n:", long_options,
+        getopt_ret = getopt_long (argc, (char *const *) argv, "spw:h:?:a:n:t:r:", long_options,
                 &option_index);
 
         if (getopt_ret == -1)
@@ -331,7 +342,10 @@ options_read (int argc,
                 opts->n_frames = atoi (optarg);
                 break;
             case OPT_TRANSLATE:
-                parse_vectors (optarg, opts);
+                opts->vectors = parse_vectors (optarg, &opts->n_vectors);
+                break;
+            case OPT_RESIZE:
+                opts->ellipsesize = parse_vectors (optarg, &opts->n_ellipsesize);
                 break;
             case OPT_HELP:
                 usage ();
@@ -347,8 +361,10 @@ static void
 options_free (Options *opts)
 {
     free (opts->vectors);
+    free (opts->ellipsesize);
     free (opts);
 }
+
 
 static void
 animate_ellipses (double *ellipses,
@@ -356,13 +372,22 @@ animate_ellipses (double *ellipses,
                   Options *opts)
 {
     size_t max_ellipses;
-
+    size_t num_ellipsesize;
+    
     max_ellipses = opts->n_vectors > n_ellipses ? n_ellipses : opts->n_vectors;
 
     for (int i = 0; i < max_ellipses; i++) {
         int index = i * N_ELLIPSE_PARAMS;
         ellipses[index] += opts->vectors[i*2];
         ellipses[index+1] += opts->vectors[i*2+1];
+    }
+
+    num_ellipsesize = opts->n_ellipsesize;
+    
+    for (int i = 0; i < num_ellipsesize; i++) {
+        int index = i * N_ELLIPSE_PARAMS;
+        ellipses[index+2] += opts->ellipsesize[i*2];
+        ellipses[index+3] += opts->ellipsesize[i*2+1];
     }
 }
 
