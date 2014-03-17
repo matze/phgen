@@ -44,6 +44,7 @@ typedef struct {
     bool read_from_stdin;
     bool generate_phantom;
     bool generate_sinogram;
+    bool split;
     int width;
     int height;
     double angle_step;
@@ -169,7 +170,8 @@ static void
 write_tiff (float *image,
             const char *name,
             size_t width,
-            size_t height)
+            size_t height,
+            int y)
 {
     TIFF *tif = TIFFOpen (name, "w");
  
@@ -186,7 +188,7 @@ write_tiff (float *image,
     const size_t rows_per_strip = TIFFDefaultStripSize (tif, 0);
     TIFFSetField (tif, TIFFTAG_ROWSPERSTRIP, rows_per_strip);
  
-    for (int y = 0; y < height; y++, image += width)
+    for (; y < height; y++, image += width)
         TIFFWriteScanline (tif, image , y, 0);
  
     TIFFClose (tif);
@@ -200,6 +202,7 @@ usage (void)
              "Options:\n" \
              " -s, --sinogram\tGenerate sinogram\n" \
              " -p, --phantom\t\tGenerate slice phantom\n" \
+             "     --split\t\tSplit sinogram into single lines\n" \
              " -a, --angle-step S\tAngle between two projections\n" \
              " -w, --width WIDTH\tWidth of phantom or projection\n" \
              " -h, --height HEIGHT\tHeight of phantom or number of projections\n" \
@@ -322,11 +325,13 @@ options_read (int argc,
         OPT_RESIZE = 'r',
         OPT_ALPHA = 'e',
         OPT_PHI = 'f',
+        OPT_SPLIT = 1,
     };
  
     static struct option long_options[] = {
         { "sinogram", no_argument, 0, OPT_SINOGRAM },
         { "phantom", no_argument, 0, OPT_PHANTOM },
+        { "split", no_argument, 0, OPT_SPLIT },
         { "width", required_argument, 0, OPT_WIDTH },
         { "height", required_argument, 0, OPT_HEIGHT },
         { "help", no_argument, 0, OPT_HELP },
@@ -366,6 +371,9 @@ options_read (int argc,
                 break;
             case OPT_PHANTOM:
                 opts->generate_phantom = true;
+                break;
+            case OPT_SPLIT:
+                opts->split = true;
                 break;
             case OPT_WIDTH:
                 opts->width = atoi (optarg);
@@ -475,7 +483,7 @@ main (int argc,
             phantom = compute_slice (opts->width, opts->height, ellipses, n_ellipses, true);
  
             snprintf (filename, FILENAME_MAX, "phantom-%05i.tif", i);
-            write_tiff (phantom, filename, opts->width, opts->height);
+            write_tiff (phantom, filename, opts->width, opts->height, 0);
             free (phantom);
         }
  
@@ -486,9 +494,17 @@ main (int argc,
  
             angle_step = opts->angle_step < 0.0 ? M_PI / opts->height : opts->angle_step;
             sinogram = compute_sinogram (opts->width, angle_step, opts->height, ellipses, n_ellipses, true);
- 
-            snprintf (filename, FILENAME_MAX, "sinogram-%05i.tif", i);
-            write_tiff (sinogram, filename, opts->width, opts->height);
+
+            if (opts->split) {
+                for (int j = 0; j < opts->height; j++) {
+                    snprintf (filename, FILENAME_MAX, "sinogram-%05i-%05i.tif", i, j);
+                    write_tiff (sinogram, filename, opts->width, j + 1, j);
+                }
+            }
+            else {
+                snprintf (filename, FILENAME_MAX, "sinogram-%05i.tif", i);
+                write_tiff (sinogram, filename, opts->width, opts->height, 0);
+            }
             free (sinogram);
         }
  
