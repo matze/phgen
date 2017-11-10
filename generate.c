@@ -357,6 +357,7 @@ options_read (int argc,
     opts->alpha = NULL;
     opts->phi = NULL;
     opts->width = opts->height = opts->angle_step = -1;
+    opts->split = false;
  
     while (1) {
         getopt_ret = getopt_long (argc, (char *const *) argv, "spw:h:?:a:n:t:r:e:f:", long_options,
